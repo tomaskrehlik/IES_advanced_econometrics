@@ -1,0 +1,137 @@
+Least squares in R
+========================================================
+
+As a note: This is a revision with emphasis on implementation and problem solving in R. You should know 90% of this if not more from your previous studies. If not, revise! Many useful things are hidden in resources on this page, refer to them and select things that are interesting and useful for you!
+
+Linear regression is one of the most used tools in econometrics. It is really essential that you know what is happening behind. Personally, even if you would not like to take anything else away from econometrics, this is the thing to bear in mind always. The problems that might happen in OLS are very illustrative and often carry on to other more complicated models, where they are just counterparts of the problems that you see in OLS. Moreover, for everybody, it is useful to learn how to look at the data "out of the box" and not to take for granted the knowledge and results that somebody is presenting you! Three stars behind the p-value do not automatically mean that the model is fine!
+
+First, we need to set up a tool how to investigate the problems. Remember the theoretical model is $$Y_t = X_t \beta + \epsilon_t,$$ where $\epsilon_t \sim N(0,\sigma^2)$. (If you are not familiar with matrix notation, consult the books that you have at your disposial.) So we would like to first model some data, that are exactly as the model says. To get some data that behave according to this equation we use, so called, [sampling](http://en.wikipedia.org/wiki/Sampling_(statistics)). Essentially, you define a population that you assume and you draw values from the population at random.
+
+Here is how you do this in R (remember if you do not know, what the function is doing, run `?name_of_function` and help will tell you):
+```{r}
+# Let us have some "dummy" income model that is not at all connected to any theory, it is just to give names to 
+# variables rather than to use x1 x2....
+
+age_range <- 30:60 # Let's say we want ages from 30 to 60
+educ_range <- 9:15 # Let's say we want education from 9:15
+skill_range <- seq(from=0, to=1, by=0.01) # Let's say we want skill from 0 to 1 sampled by 0.01
+
+age <- sample(age_range, 3000, replace = T) # Here sample 3000 repetitions from age_range vector, likewise further on
+educ <- sample(educ_range, 3000, replace = T)
+skill <- sample(skill_range, 3000, replace = T)
+
+epsilon <- rnorm(3000, sd=300) # Generate 3000 normally distributed variables with sd=300
+
+income <- 7000 - 4 * age*(age-80) + 100 * educ + 200 * skill + epsilon # Set up some theoretical model
+```
+
+Now, we have some simulated/sampled data. If you would be doing some real statistical analysis, you might want to plot them and do descriptive statistics, which would show you intervals in which the variables are, at the beginning. So far, we have variables in vectors alone, let's put them into `data.frame`. (the table of data that you know from previous seminar) We do it because there are some tools in R which you then might use to get descriptive statistics on your data.
+
+```{r}
+my_data <- data.frame(age = age, educ = educ, skill = skill, income = income) # Creating a data.frame from vectors
+```
+
+For plotting, having the data in `data.frame` is particularly useful, because you can use the predefined function `plot`, that will show you bivariate relations between the variables. That might be particularly useful as a hint for functional form of the regression. (Talking about functional form, what do you think would happen if we would put into the regression all the regressors with their cross products and powers up till some $n$? As a hint, remember [Taylor series](http://en.wikipedia.org/wiki/Taylor_series). Is it good idea?)
+
+```{r}
+plot(my_data)
+```
+
+We can see that the data are artificially created, but nevertheless it is a good illustration example. So we know that if you run `plot` function on data, you will get a cross plots among all the variables. This is very useful in case if you have up to 10 variables, if you have more the plot quickly becomes cluttered. Other useful tool is to run `summary` function which gives distributional information
+
+```{r}
+summary(my_data)
+```
+
+And if you want some custom descriptive statistics, you can always make your own function for that!!!!
+
+
+Ordinary Leas Squares
+-------------------------
+
+We will do two things now. First, we will see how to use `R` high-level command to get us the normal regression output. Then to practice, we will reimplement the OLS as our own function.
+
+To get the standard output, you run this command
+
+```{r}
+model <- lm(income ~ age + educ + skill, data=my_data) #lm stands for linear model
+summary(model)
+```
+
+When you look at the results, you might note that they are statistically significant, yet because we know what the coefficients should be, we know that the intercept and age coefficients are wrong!!! So to reiterate, the estimation is wrong even though it is statistically significant! Why did it happen?
+
+We did not include `age^2` which of course leads to some bias, because it is a omitted variable to some extent. Moreover, there is another interesting issue in here. Because the regressors are orthogonal, the estimates on skill and educ are very close to their value. This is not generally true!
+
+In here we cannot use just `income ~ age + educ + skill + age^2` in the formula above, but we must generate a new column. This is done as follows (I also run the regression there.)
+
+```{r}
+my_data$age2 <- age^2
+model1 <- lm(income ~ age + age2 + educ + skill, data=my_data) #lm stands for linear model
+summary(model1)
+```
+
+Here, you see that the regression is already fine and shows all the coefficients as we would expect from the data-generating process.
+
+Now, to get some practice, we will implement a function called `my_ols` which will take two matrices and it will run OLS for us and print the output. Here is the source code with occassional comments:
+
+```{r}
+my_ols <- function(Y, X, const) {
+  # Check the sizes of Y and X if they work
+  if ((length(Y))!=(nrow(X))) {
+    return("Matrices are not of the appropriate sizes.")
+  }
+  # Add constant
+  if (const) {
+    X <- cbind(rep(1, nrow(X)), X)
+  }
+  n <- nrow(X) # Number of observations
+  k <- ncol(X) # Number of regressors
+  # Check number of observations
+  if (n<=k) {
+    return("Too few observations in the sample.")
+  }
+  
+  a <- t(X)%*%X
+  b <- t(X)%*%Y
+  
+  # Check if X'X is invertible
+  if (det(a)==0) {
+    return("X'X is not invertible")
+  }
+  if (det(a)<0.01) {
+    return("X'X determinant is close to 0")
+  }
+  
+  # Get the coefficients
+  beta_hat <- solve(a)%*%b # using solve() will give you the inverse of the matrix
+  
+  # Get the sd
+  residuals <- X%*%beta_hat - Y
+  s2 <- t(residuals)%*%residuals / (n-k)
+  sd_beta <- sqrt( diag( s2[1,1] * solve(a) ) )
+  
+  # Compute t-statistics
+  t_stats <- (beta_hat - 0) / sd_beta
+  
+  # Compute t-values, remember the pnorm function? pt is equivalent for Student distribution
+  p_values <- pt(abs(t_stats), df = (n-k), lower.tail=F)
+  
+  # Get confidence intervals
+  conf_t_val <- qt(0.975, df = (n-k))
+  
+  uc <- beta_hat + conf_t_val * sd_beta
+  lc <- beta_hat - conf_t_val * sd_beta
+  
+  # Create the output matrix
+  output <- cbind(beta_hat, sd_beta, t_stats, uc, lc, p_values)
+  colnames(output) <- c("Estimate", "SD", "T-value", "L-conf", "U-conf", "p-value")
+  print(output)
+}
+```
+
+Now, we can compare the two outputs:
+```{r}
+my_ols(Y=income, X=cbind(age,age^2, educ, skill), const=TRUE)
+```
+
+There are obviously ways how to make the output nicer, but that is not a purpose of this exercise. The purpose is, first, to show you that anything can be implemented quite easily within minutes, if you know what are you doing and within hours if you don't. The software is nothing to be affraid of! Experiment! If you add something new, everybody can benefit from it, if you share! That is how R came around!

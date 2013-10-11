@@ -1,0 +1,22 @@
+@font-face {
+    font-family: 'Roboto';
+    src: url("http://fonts.googleapis.com/css?family=Roboto+Slab&subset=latin,cyrillic-ext,latin-ext");
+}
+@font-face {
+	font-family: 'mono';
+	src: url('http://fonts.googleapis.com/css?family=Cutive+Mono');
+}
+
+p {
+	font-family: 'Roboto';
+	font-size:12pt;
+	max-width:750px;
+	font-family:;
+}
+
+pre {	
+	background-color: #dcdcdc;
+	max-width:600px;
+	font-size:10pt;
+	font-family:'mono';
+}
